@@ -1,5 +1,7 @@
 pub mod logger {
-    use {chrono::Local, std::{fmt::{Display, Formatter, Result}, thread}};
+    use {chrono::Local, std::{fmt::{Display, Formatter, Result}, thread}, colored::Colorize};
+
+    static mut ENABLE_COLORS: bool = false;
 
     pub enum LogStatus {
         INFO,
@@ -17,6 +19,12 @@ pub mod logger {
         }
     }
 
+    pub fn enable_colors_in_console() {
+        unsafe {
+            ENABLE_COLORS = true;
+        }
+    }
+
     pub fn enable_logging_to_file(path: &str, remove_last_log: bool) {
         logger_to_file::enable_logging_to_file(path, remove_last_log);
     }
@@ -24,18 +32,28 @@ pub mod logger {
     pub fn log_str(status: LogStatus, text: &str) {
         let log: String = format!("({0}) [{1}] {2}: {3}", get_current_time(), status, get_current_thread_name(), text);
         
-        println!("{}", log);
-        
-        match logger_to_file::print_log_to_file(log) {
+        match logger_to_file::print_log_to_file(log.as_str()) {
             Ok(_) => (),
             Err(error) => panic!("Error appending to file: {}", error)
         };
+        
+        unsafe {
+            if ENABLE_COLORS {
+                println!("{}", match status {
+                    LogStatus::INFO => log,
+                    LogStatus::WARN => log.yellow().to_string(),
+                    LogStatus::ERROR => log.red().to_string()
+                });
+                return;
+            }
+        }
+        println!("{}", log);
     }
 
     fn get_current_thread_name() -> String {
         String::from(match thread::current().name() {
             Some(name) => name,
-            None => "Undefined_thread"
+            None => "undefined_thread"
         })
     }
 
@@ -64,7 +82,7 @@ pub mod logger {
             }
         }
 
-        pub fn print_log_to_file(log: String) -> Result<(), Error> {
+        pub fn print_log_to_file(log: &str) -> Result<(), Error> {
             unsafe {
                 if PATH_TO_LOGGING != String::new() {
                     let mut file: File = OpenOptions::new().create(true).append(true).open(PATH_TO_LOGGING.as_str())?;
